@@ -10,9 +10,8 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-// Replace with your own channel ID or forum channel ID.
-// If using a forum, you may need to iterate over thread IDs instead.
-const channelID = "1017265769102450748"
+// channel ID or forum channel ID.
+const channelID = ""
 
 func Run(token string) {
 
@@ -21,25 +20,23 @@ func Run(token string) {
 	}
 
 	// Create a new Discord session.
-	dg, err := discordgo.New("Bot " + token)
+	botSession, err := discordgo.New("Bot " + token)
 	if err != nil {
 		log.Fatalf("Error creating Discord session: %v\n", err)
 	}
 
-	// Open the WebSocket and begin listening.
-	err = dg.Open()
+	err = botSession.Open()
 	if err != nil {
 		log.Fatalf("Error opening Discord session: %v\n", err)
 	}
-	defer dg.Close()
+	defer botSession.Close()
 
 	log.Println("Bot is now running. Press CTRL-C to exit.")
 
-	// Register the slash command during startup (optional: you can register once, or whenever you start up).
-	registerSlashCommands(dg)
+	registerSlashCommands(botSession)
 
-	// Add a handler for interaction events (slash commands).
-	dg.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	// slash command handler
+	botSession.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		if i.Type == discordgo.InteractionApplicationCommand {
 			switch i.ApplicationCommandData().Name {
 			case "randomimage":
@@ -48,15 +45,15 @@ func Run(token string) {
 		}
 	})
 
-	// Keep the program running until CTRL-C or an error occurs.
+	// Keeps bot running until ctrl-c or an error occurs.
 	select {}
 }
 
-// registerSlashCommands creates (and overwrites) the /randomimage command in your guild (or globally).
+// creates /randomimage slash command in your guild
 func registerSlashCommands(s *discordgo.Session) {
 	_, err := s.ApplicationCommandCreate(
 		s.State.User.ID,
-		os.Getenv("GUILD"), // If empty, it registers globally. Otherwise, put a specific Guild ID to limit scope.
+		os.Getenv("GUILD"),
 		&discordgo.ApplicationCommand{
 			Name:        "randomimage",
 			Description: "Returns a random image from a designated channel.",
@@ -68,8 +65,7 @@ func registerSlashCommands(s *discordgo.Session) {
 	}
 }
 
-// handleRandomImage fetches recent messages from a specified channel, filters out image attachments,
-// selects one at random, and sends it back in the slash command response.
+// fetches recent messages from a specified channel, filters out image attachments
 func handleRandomImage(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	imageURL, err := getRandomImageURL(s, channelID)
 	if err != nil {
@@ -81,9 +77,8 @@ func handleRandomImage(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	respondWithMessage(s, i, fmt.Sprintf("Here is your random image:\n%s", imageURL))
 }
 
-// getRandomImageURL fetches messages in the channel, grabs attachments that are likely images, and picks one at random.
+// fetches messages in the channel, grabs attachments
 func getRandomImageURL(s *discordgo.Session, channelID string) (string, error) {
-	// Fetch the most recent 100 messages (max allowed by Discord in one request).
 	messages, err := s.ChannelMessages(channelID, 100, "", "", "")
 	if err != nil {
 		return "", fmt.Errorf("could not retrieve messages: %w", err)
@@ -91,15 +86,12 @@ func getRandomImageURL(s *discordgo.Session, channelID string) (string, error) {
 
 	var imageURLs []string
 	for _, msg := range messages {
-		// Check for attachments
 		for _, attachment := range msg.Attachments {
-			// You could also check the content type or extension here for more robust filtering.
 			if isImageAttachment(attachment) {
 				imageURLs = append(imageURLs, attachment.URL)
 			}
 		}
 
-		// Optionally, if you want to include image links from message embeds:
 		for _, embed := range msg.Embeds {
 			if embed.Type == discordgo.EmbedTypeImage && embed.URL != "" {
 				imageURLs = append(imageURLs, embed.URL)
@@ -113,19 +105,18 @@ func getRandomImageURL(s *discordgo.Session, channelID string) (string, error) {
 		return "", fmt.Errorf("no image attachments found in channel")
 	}
 
-	// Pick a random image from the slice
 	rand.Seed(time.Now().UnixNano())
 	randomIndex := rand.Intn(len(imageURLs))
 	return imageURLs[randomIndex], nil
 }
 
-// isImageAttachment is a basic check; you may want to refine this further.
+// file filter
 func isImageAttachment(attachment *discordgo.MessageAttachment) bool {
 	// Check file extension or ContentType if available.
 	return attachment.Width > 0 && attachment.Height > 0
 }
 
-// respondWithMessage is a helper function to send a response to a slash command.
+// helper function to send a response to a slash command.
 func respondWithMessage(s *discordgo.Session, i *discordgo.InteractionCreate, content string) {
 	err := s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 		Type: discordgo.InteractionResponseChannelMessageWithSource,
